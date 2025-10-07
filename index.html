@@ -7,7 +7,6 @@
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body>
@@ -15,12 +14,6 @@
 
     <script type="text/babel">
         const { useState, useEffect } = React;
-
-        // 🔥 REPLACE THESE WITH YOUR SUPABASE CREDENTIALS 🔥
-        const SUPABASE_URL = https://cbrxncdxxojoeaitpfez.supabase.co;
-        const SUPABASE_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNicnhuY2R4eG9qb2VhaXRwZmV6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk3NjMwMTUsImV4cCI6MjA3NTMzOTAxNX0.NIjhzHjrZLHwbkFy5EGNdPiEgfa4Zo2Pgifhx-oGnK8;
-
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         const OutOfOfficeTracker = () => {
             const teams = {
@@ -101,25 +94,22 @@
                 return date.toLocaleDateString('en-US', { weekday: 'short' });
             };
 
-            // Load data from Supabase
+            // Load data from Azure Functions API
             useEffect(() => {
                 loadData();
             }, []);
 
             const loadData = async () => {
                 try {
-                    const { data, error } = await supabase
-                        .from('out_dates')
-                        .select('*');
+                    const response = await fetch('/api/getOutDates');
+                    const data = await response.json();
                     
-                    if (error) throw error;
-
                     const formatted = {};
-                    data.forEach(row => {
-                        if (!formatted[row.person]) {
-                            formatted[row.person] = {};
+                    data.forEach(item => {
+                        if (!formatted[item.person]) {
+                            formatted[item.person] = {};
                         }
-                        formatted[row.person][row.date_key] = row.is_out;
+                        formatted[item.person][item.dateKey] = item.isOut;
                     });
                     
                     setOutDates(formatted);
@@ -142,29 +132,27 @@
                     }
                 }));
 
-                // Save to Supabase
+                // Save to Azure
                 try {
-                    if (newValue) {
-                        // Insert or update
-                        const { error } = await supabase
-                            .from('out_dates')
-                            .upsert({ person, date_key: dateKey, is_out: true });
-                        
-                        if (error) throw error;
-                    } else {
-                        // Delete the record
-                        const { error } = await supabase
-                            .from('out_dates')
-                            .delete()
-                            .match({ person, date_key: dateKey });
-                        
-                        if (error) throw error;
+                    const response = await fetch('/api/saveOutDate', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            person: person,
+                            dateKey: dateKey,
+                            isOut: newValue
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Failed to save');
                     }
                 } catch (error) {
                     console.error('Error saving data:', error);
                     alert('Error saving data. Please try again.');
-                    // Reload data to sync
-                    loadData();
+                    loadData(); // Reload to sync
                 }
             };
 
